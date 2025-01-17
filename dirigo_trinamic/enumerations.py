@@ -95,3 +95,8 @@ class AxisParameters(IntEnum):
     LEFT_LIMIT_SWITCH_STATUS = 11
     RIGHT_LIMIT_SWITCH_DISABLE = 12
     LEFT_LIMIT_SWITCH_DISABLE = 13
+
+
+class AdvancedAxisParameters(IntEnum):
+    MICROSTEP_RESOLUTION = 140
+    PULSE_DIVISOR = 154 # The exponent of the scaling factor for the pulse (step) generator
