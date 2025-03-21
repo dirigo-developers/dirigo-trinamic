@@ -5,7 +5,7 @@ import serial
 from dirigo import units
 from dirigo.hw_interfaces.scanner import ObjectiveZScanner
 
-from enumerations import *
+from dirigo_trinamic.enumerations import *
 
 
 
@@ -83,11 +83,9 @@ class TrinamicController:
         return value
 
 
-
 class TrinamicObjectiveZScanner(ObjectiveZScanner):
 
-    def __init__(self, com_port: int, step_angle: str, 
-                 travel_per_rev: str, 
+    def __init__(self, com_port: int, step_angle: str, travel_per_rev: str, 
                  module_address: int = 1, **kwargs):
         super().__init__(**kwargs)
 
