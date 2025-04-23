@@ -87,6 +87,8 @@ class TrinamicController:
 
 
 class TrinamicObjectiveZScanner(ObjectiveZScanner):
+    MAX_TMC_VELOCITY = 2047
+    MAX_TMC_ACCELERATION = 2047
 
     def __init__(self, com_port: int, step_angle: str, travel_per_rev: str, 
                  module_address: int = 1, **kwargs):
@@ -150,9 +152,9 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
             raise ValueError("`max_velocity` must be set with a Velocity object.")
         velo_microsteps = float(velocity) / float(self._distance_per_microstep)
         velo_trinamic = round(velo_microsteps / self._velocity_factor)
-        if not (0 < velo_trinamic <= 2047):
+        if not (0 < velo_trinamic <= self.MAX_TMC_VELOCITY):
             raise ValueError(f"Attempted to set stepper velocity outside of "
-                             f"allowable range (0-2047). Got: {velo_trinamic}")
+                             f"allowable range (0-{self.MAX_TMC_VELOCITY}). Got: {velo_trinamic}")
 
         cmd = self._controller.make_command(
             instruction=ParameterCommands.SET_AXIS_PARAMETER, 
@@ -163,7 +165,7 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
 
     @cached_property
     def _velocity_factor(self):
-        """Ratio of microsteps per second to internal Trinamic velocity (0-2047).
+        """Ratio of microsteps per second to internal Trinamic velocity.
         """
         cmd = self._controller.make_command(
             instruction=ParameterCommands.GET_AXIS_PARAMETER, 
@@ -193,9 +195,9 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
             raise ValueError("`acceleration` must be set with an Acceleration object.")
         accel_microsteps = float(value) / float(self._distance_per_microstep)
         accel_trinamic = round(accel_microsteps / self._acceleration_factor)
-        if not (0 < accel_trinamic <= 2047):
+        if not (0 < accel_trinamic <= self.MAX_TMC_ACCELERATION):
             raise ValueError(f"Attempted to set stepper velocity outside of "
-                             f"allowable range (0-2047). Got: {accel_trinamic}")
+                             f"allowable range (0-{self.MAX_TMC_ACCELERATION}). Got: {accel_trinamic}")
         
         cmd = self._controller.make_command(
             instruction=ParameterCommands.SET_AXIS_PARAMETER, 
@@ -239,7 +241,7 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         actual_speed = self._controller.send_receive(cmd)
         return bool(actual_speed)
 
-    def move_to(self, position: units.Position, blocking: bool = False):
+    def move_to(self, position: units.Position, blocking: bool = False) -> None:
         """
         Initiate move to specified spatial position.
 
@@ -248,17 +250,16 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         """
         raise NotImplementedError("Only for homed devices")
 
-    def move_relative(self, move_distance: units.Position):
+    def move_relative(self, move_distance: units.Position) -> None:
         """Moves a distance relative the current position."""
         cmd = self._controller.make_command(
             instruction=MotionCommands.MOVE_TO_POSITION, 
             type=MoveTypes.RELATIVE, 
             operand=round(move_distance / self._distance_per_microstep)
         )
-        value = self._controller.send_receive(cmd)
-        return value
+        self._controller.send_receive(cmd)
     
-    def move_velocity(self, velocity: units.Velocity):
+    def move_velocity(self, velocity: units.Velocity) -> None:
         """"
         Initiate movement at velocity until stopped.
         """
@@ -271,23 +272,22 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         velocity_microsteps = abs(float(velocity)) / self._distance_per_microstep
         velocity_trinamic = round(velocity_microsteps / self._velocity_factor)
 
-        if not (0 < velocity_trinamic <= 2047):
+        if not (0 < velocity_trinamic <= self.MAX_TMC_VELOCITY):
             raise ValueError(f"Attempted to set stepper velocity outside of "
-                             f"allowable range (0-2047). Got: {velocity_trinamic}")
+                             f"allowable range (0-{self.MAX_TMC_VELOCITY}). Got: {velocity_trinamic}")
         
         cmd = self._controller.make_command(
             instruction=instruction, 
             operand=velocity_trinamic
         )
-        value = self._controller.send_receive(cmd)
+        self._controller.send_receive(cmd)
 
-    def stop(self):
+    def stop(self) -> None:
         """Halts motion."""
         cmd = self._controller.make_command(
             instruction=MotionCommands.MOTOR_STOP 
         )
-        value = self._controller.send_receive(cmd)
-        return value
+        self._controller.send_receive(cmd)
 
     def home(self, blocking: bool = False):
         """
