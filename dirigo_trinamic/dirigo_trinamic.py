@@ -1,5 +1,6 @@
 import struct
 import threading
+from functools import cached_property
 
 import serial
 from dirigo import units
@@ -28,9 +29,9 @@ class TrinamicController:
 
         self._lock = threading.Lock()
 
-        self.open_seial_port()
+        self.open_serial_port()
 
-    def open_seial_port(self):
+    def open_serial_port(self):
         com_str = "COM" + str(self._com_port)
 
         self._serial_port = serial.Serial(
@@ -57,30 +58,32 @@ class TrinamicController:
     
     def send_receive(self, cmd: bytearray):
         """Send a command, validate response"""
-        self._serial_port.reset_input_buffer()
-        self._serial_port.reset_output_buffer()
-        self._serial_port.write(cmd)
-        self._serial_port.flush()
-        response = self._serial_port.read(9)
-        
+        with self._lock:
+            self._serial_port.reset_input_buffer()
+            self._serial_port.reset_output_buffer()
+            self._serial_port.write(cmd)
+            self._serial_port.flush()
+            response = self._serial_port.read(9)
+            
         return self._interpret_response(response)
     
     def _interpret_response(self, response: bytearray):
-        checksum = sum(response[:-1]) & 0xFF
-        if not checksum == response[-1]:
-            raise ConnectionError(
-                f"Checksum Error, attached checksum: {response[-1]}, "
-                f"calculated checksum: {checksum}"
-            )
+        if response:
+            checksum = sum(response[:-1]) & 0xFF
+            if not checksum == response[-1]:
+                raise ConnectionError(
+                    f"Checksum Error, attached checksum: {response[-1]}, "
+                    f"calculated checksum: {checksum}"
+                )
 
-        if not response[2] == StatusCodes.SUCCESSFULLY_EXECUTED:
-            status = StatusCodes(response[2]).name
-            raise ConnectionError(f"Command unsuccessful: {status}")
-        
-        # bytes4-7: value
-        value = struct.unpack('>i', response[4:8])[0]
+            if not response[2] == StatusCodes.SUCCESSFULLY_EXECUTED:
+                status = StatusCodes(response[2]).name
+                raise ConnectionError(f"Command unsuccessful: {status}")
+            
+            # bytes4-7: value
+            value = struct.unpack('>i', response[4:8])[0]
 
-        return value
+            return value
 
 
 class TrinamicObjectiveZScanner(ObjectiveZScanner):
@@ -103,12 +106,9 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         )
         return_code = self._controller.send_receive(cmd)
 
-        if return_code == 1:
-            return 0.5 
-        else:
-            return 2**return_code # increasing powers of 2
+        return 2 ** return_code # increasing powers of 2
         
-    @property
+    @cached_property
     def _distance_per_microstep(self) -> units.Position:
         """The linear travel per microstep."""
         normalized_step_angle = self._step_angle / units.Angle("360 deg")
@@ -159,9 +159,9 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
             type=AxisParameters.MAX_POSITIONING_SPEED,
             operand=velo_trinamic
         )
-        value = self._controller.send_receive(cmd)
+        self._controller.send_receive(cmd)
 
-    @property
+    @cached_property
     def _velocity_factor(self):
         """Ratio of microsteps per second to internal Trinamic velocity (0-2047).
         """
@@ -169,25 +169,60 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
             instruction=ParameterCommands.GET_AXIS_PARAMETER, 
             type=AdvancedAxisParameters.PULSE_DIVISOR
         )
-        value = self._controller.send_receive(cmd)
-        return 16e6 / (2**value * 2048 * 32)
+        pulse_divisor = self._controller.send_receive(cmd)
+        # Source: TMCM-140-42-SE Hardware Manual V1.05, page 20
+        return 16e6 / (2**pulse_divisor * 2048 * 32)
 
     @property
     def acceleration(self) -> units.Acceleration:
         """
-        Return the acceleration used during ramp up/down phase of move.
+        Acceleration used during ramp up/down phase of move.
         """
-        pass
+        cmd = self._controller.make_command(
+            instruction=ParameterCommands.GET_AXIS_PARAMETER, 
+            type=AxisParameters.MAX_ACCELERATION
+        )
+        accel_trinamic = self._controller.send_receive(cmd)
+
+        accel_trinamic = accel_trinamic * self._acceleration_factor
+        return units.Acceleration(accel_trinamic * float(self._distance_per_microstep))
 
     @acceleration.setter
     def acceleration(self, value: units.Acceleration):
-        pass
-
+        if not isinstance(value, units.Acceleration):
+            raise ValueError("`acceleration` must be set with an Acceleration object.")
+        accel_microsteps = float(value) / float(self._distance_per_microstep)
+        accel_trinamic = round(accel_microsteps / self._acceleration_factor)
+        if not (0 < accel_trinamic <= 2047):
+            raise ValueError(f"Attempted to set stepper velocity outside of "
+                             f"allowable range (0-2047). Got: {accel_trinamic}")
+        
+        cmd = self._controller.make_command(
+            instruction=ParameterCommands.SET_AXIS_PARAMETER, 
+            type=AxisParameters.MAX_ACCELERATION,
+            operand=accel_trinamic
+        )
+        self._controller.send_receive(cmd)
+    
+    @cached_property
+    def _acceleration_factor(self) -> int:
+        cmd = self._controller.make_command(
+            instruction=ParameterCommands.GET_AXIS_PARAMETER, 
+            type=AdvancedAxisParameters.RAMP_DIVISOR
+        )
+        ramp_divisor = self._controller.send_receive(cmd)
+        cmd = self._controller.make_command(
+            instruction=ParameterCommands.GET_AXIS_PARAMETER, 
+            type=AdvancedAxisParameters.PULSE_DIVISOR
+        )
+        pulse_divisor = self._controller.send_receive(cmd)
+        # Source: TMCM-140-42-SE Hardware Manual V1.05, page 20
+        return (16e6)**2 / 2**(ramp_divisor + pulse_divisor + 29)
+    
     @property
     def device_info(self) -> None:
         """Returns an object describing permanent properties of the stage."""
         pass
-
 
     @property
     def position_limits(self) -> units.RangeWithUnits:
@@ -197,7 +232,12 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
     @property
     def moving(self) -> bool:   
         """Return True if the stage axis is currently moving."""
-        pass
+        cmd = self._controller.make_command(
+            instruction=ParameterCommands.GET_AXIS_PARAMETER, 
+            type=AxisParameters.ACTUAL_SPEED
+        )
+        actual_speed = self._controller.send_receive(cmd)
+        return bool(actual_speed)
 
     def move_to(self, position: units.Position, blocking: bool = False):
         """
@@ -264,21 +304,4 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         pass
         
 
-
-if __name__ == "__main__":
-    import time
-    config = {
-        "com_port": 5,
-        "step_angle": "1.8 deg",
-        "travel_per_rev": "0.1 mm",
-    }
-
-    tri = TrinamicObjectiveZScanner(axis="z", **config)
-
-
-    tri.move_velocity(units.Velocity('0.5 mm/s'))
-    time.sleep(2)
-    tri.stop()
-
-    None
 

@@ -100,3 +100,4 @@ class AxisParameters(IntEnum):
 class AdvancedAxisParameters(IntEnum):
     MICROSTEP_RESOLUTION = 140
     PULSE_DIVISOR = 154 # The exponent of the scaling factor for the pulse (step) generator
+    RAMP_DIVISOR = 153 # The exponent of the scaling factor for the ramp generator
