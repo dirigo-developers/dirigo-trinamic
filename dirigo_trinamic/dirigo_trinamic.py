@@ -9,8 +9,6 @@ from dirigo.hw_interfaces.scanner import ObjectiveZScanner
 from dirigo_trinamic.enumerations import *
 
 
-
-
 class TrinamicController:
     """Controller for command composition, send, and receive via Serial port."""
     def __init__(self, com_port: int, module_address: int = 1, baud_rate = BaudRates.BAUD_9600):
@@ -35,7 +33,10 @@ class TrinamicController:
         com_str = "COM" + str(self._com_port)
 
         self._serial_port = serial.Serial(
-            com_str, self._baud_rate, timeout=3, write_timeout=None
+            port=com_str, 
+            baudrate=self._baud_rate.rate, 
+            timeout=3, 
+            write_timeout=None
         )
 
     def make_command(self, instruction, type=0, operand=0):
@@ -121,12 +122,16 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
     @property
     def position(self):
         """The current (actual) position."""
+        value = self._controller.send_receive(self._position_cmd)
+        return value * self._distance_per_microstep
+    
+    @cached_property
+    def _position_cmd(self) -> str:
         cmd = self._controller.make_command(
             instruction=ParameterCommands.GET_AXIS_PARAMETER, 
             type=AxisParameters.ACTUAL_POSITION
         )
-        value = self._controller.send_receive(cmd)
-        return value * self._distance_per_microstep
+        return cmd
     
     @property
     def max_velocity(self) -> units.Velocity:

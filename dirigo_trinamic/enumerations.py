@@ -79,6 +79,21 @@ class BaudRates(IntEnum):
     BAUD_57600 = 5
     # There are higher baud rates, but there is a note that they are not supported by Windows or the error rate is high
 
+    @property
+    def rate(self) -> int:
+        if self.value == 0:
+            return 9600
+        elif self.value == 1:
+            return 14400
+        elif self.value == 2:
+            return 19200
+        elif self.value == 3:
+            return 28800
+        elif self.value == 4:
+            return 38400
+        elif self.value == 5:
+            return 57600
+
 
 class AxisParameters(IntEnum):
     TARGET_POSITION = 0
