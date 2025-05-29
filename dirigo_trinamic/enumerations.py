@@ -93,6 +93,8 @@ class BaudRates(IntEnum):
             return 38400
         elif self.value == 5:
             return 57600
+        else:
+            raise ValueError("Unsupported baud rate")
 
 
 class AxisParameters(IntEnum):

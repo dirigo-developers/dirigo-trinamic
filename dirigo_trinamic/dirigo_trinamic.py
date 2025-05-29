@@ -66,7 +66,7 @@ class TrinamicController:
             self._serial_port.flush()
             response = self._serial_port.read(9)
             
-        return self._interpret_response(response)
+        return self._interpret_response(bytearray(response))
     
     def _interpret_response(self, response: bytearray):
         if response:
@@ -109,6 +109,8 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         )
         return_code = self._controller.send_receive(cmd)
 
+        if return_code is None:
+            raise RuntimeError("Could not get microstep resolution code")
         return 2 ** return_code # increasing powers of 2
         
     @cached_property
@@ -126,7 +128,7 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         return value * self._distance_per_microstep
     
     @cached_property
-    def _position_cmd(self) -> str:
+    def _position_cmd(self) -> bytearray:
         cmd = self._controller.make_command(
             instruction=ParameterCommands.GET_AXIS_PARAMETER, 
             type=AxisParameters.ACTUAL_POSITION
@@ -177,8 +179,11 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
             type=AdvancedAxisParameters.PULSE_DIVISOR
         )
         pulse_divisor = self._controller.send_receive(cmd)
+        if pulse_divisor is None:
+            raise RuntimeError("Could not get pulse divisor code")
+
         # Source: TMCM-140-42-SE Hardware Manual V1.05, page 20
-        return 16e6 / (2**pulse_divisor * 2048 * 32)
+        return 16e6 / (2 ** pulse_divisor * 2048 * 32)
 
     @property
     def acceleration(self) -> units.Acceleration:
@@ -190,6 +195,8 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
             type=AxisParameters.MAX_ACCELERATION
         )
         accel_trinamic = self._controller.send_receive(cmd)
+        if accel_trinamic is None:
+            raise RuntimeError("Could not get acceleration parameter")
 
         accel_trinamic = accel_trinamic * self._acceleration_factor
         return units.Acceleration(accel_trinamic * float(self._distance_per_microstep))
@@ -223,6 +230,9 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
             type=AdvancedAxisParameters.PULSE_DIVISOR
         )
         pulse_divisor = self._controller.send_receive(cmd)
+        if pulse_divisor is None:
+            raise RuntimeError("Could not get pulse divisor")
+
         # Source: TMCM-140-42-SE Hardware Manual V1.05, page 20
         return (16e6)**2 / 2**(ramp_divisor + pulse_divisor + 29)
     
@@ -234,7 +244,7 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
     @property
     def position_limits(self) -> units.RangeWithUnits:
         """Returns an object describing the stage movement limits."""
-        pass
+        raise NotImplementedError
 
     @property
     def moving(self) -> bool:   
@@ -301,12 +311,12 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         Choose whether to return immediately (blocking=False, default) or to
         wait until finished homing (blocking=True).
         """
-        pass
+        raise NotImplementedError
 
     @property
     def homed(self) -> bool:
         """Return whether the stage has been home."""
-        pass
+        return False # not currently possible
         
 
 
