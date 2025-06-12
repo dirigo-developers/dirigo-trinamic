@@ -263,7 +263,12 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
         Choose whether to return immediately (blocking=False, default) or to
         wait until finished moving (blocking=True).
         """
-        raise NotImplementedError("Only for homed devices")
+        cmd = self._controller.make_command(
+            instruction=MotionCommands.MOVE_TO_POSITION, 
+            type=MoveTypes.ABSOLUTE, 
+            operand=round(position / self._distance_per_microstep)
+        )
+        self._controller.send_receive(cmd)
 
     def move_relative(self, move_distance: units.Position) -> None:
         """Moves a distance relative the current position."""
