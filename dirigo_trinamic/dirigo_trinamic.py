@@ -11,7 +11,10 @@ from dirigo_trinamic.enumerations import *
 
 class TrinamicController:
     """Controller for command composition, send, and receive via Serial port."""
-    def __init__(self, com_port: int, module_address: int = 1, baud_rate = BaudRates.BAUD_9600):
+    def __init__(self, 
+                 com_port: int, 
+                 module_address: int = 1, 
+                 baud_rate = BaudRates.BAUD_9600):
         if not isinstance(module_address, int) or module_address < 1:
             raise ValueError("Module address must be an integer 1 or greater.")
         self._module_address = module_address
@@ -91,8 +94,12 @@ class TrinamicObjectiveZScanner(ObjectiveZScanner):
     MAX_TMC_VELOCITY = 2047
     MAX_TMC_ACCELERATION = 2047
 
-    def __init__(self, com_port: int, step_angle: str, travel_per_rev: str, 
-                 module_address: int = 1, **kwargs):
+    def __init__(self, 
+                 com_port: int, 
+                 step_angle: str, 
+                 travel_per_rev: str, 
+                 module_address: int = 1, 
+                 **kwargs):
         super().__init__(**kwargs)
 
         self._controller = TrinamicController(com_port, module_address)
