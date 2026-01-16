@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dirigo_trinamic"
-version = "0.1.0"
-description = "Plugin to use Trinamic stepper motoros with Dirigo."
+version = "0.2.0"
+description = "Plugin to use Trinamic stepper motors with Dirigo."
 authors = [
     {name = "T. D. Weber", email = "tweber@mit.edu"}
 ]
@@ -15,5 +15,10 @@ dependencies = [
     "pyserial" 
 ]
 
+# deprecated
 [project.entry-points."dirigo_scanners"]
 trinamic_objective_z_scanner = "dirigo_trinamic:TrinamicObjectiveZScanner"
+
+# new format
+[project.entry-points."dirigo.devices.objective_actuator"]
+trinamic = "dirigo_trinamic:TrinamicObjectiveZScanner"
